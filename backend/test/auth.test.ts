@@ -6,7 +6,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { createApp } from "../src/app.js";
 import { openDatabase } from "../src/db/connection.js";
-import { seedUser } from "../src/db/seed.js";
+import { seedAdmin, seedUser } from "../src/db/seed.js";
 import { loadConfig } from "../src/config.js";
 import type { AuthConfig } from "../src/config.js";
 
@@ -25,6 +25,7 @@ before(async () => {
   if (!server.listening) await once(server, "listening");
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`;
   await seedUser(database);
+  await seedAdmin(database);
 });
 after(async () => {
   await new Promise<void>((resolve, reject) =>
@@ -57,10 +58,18 @@ async function request(
       : {}),
   });
 }
-async function login(rememberMe = false, cookie?: string) {
+async function login(
+  rememberMe = false,
+  cookie?: string,
+  role: "user" | "admin" = "user",
+) {
   const response = await request("/auth/login", {
     method: "POST",
-    body: { email: "moodeng@gmail.com", password: "moodeng123", rememberMe },
+    body: {
+      email: role === "admin" ? "admin@gmail.com" : "moodeng@gmail.com",
+      password: role === "admin" ? "admin123" : "moodeng123",
+      rememberMe,
+    },
     ...(cookie ? { cookie } : {}),
   });
   assert.equal(response.status, 200);
@@ -430,4 +439,272 @@ test("cookie-auth mutations reject untrusted or missing Origin", async () => {
   assert.equal(bad.status, 403);
   const absent = await fetch(`${base}/auth/logout`, { method: "POST" });
   assert.equal(absent.status, 403);
+});
+
+test("admin seed hashes the password and preserves both existing accounts on repeated runs", async () => {
+  const originalUser = database
+    .prepare("SELECT * FROM users WHERE email = ?")
+    .get("moodeng@gmail.com");
+  const originalAdmin = database
+    .prepare("SELECT * FROM users WHERE email = ?")
+    .get("admin@gmail.com") as { password_hash: string; role: string };
+  await seedUser(database);
+  await seedAdmin(database);
+  await seedAdmin(database);
+  assert.deepEqual(
+    database
+      .prepare("SELECT * FROM users WHERE email = ?")
+      .get("moodeng@gmail.com"),
+    originalUser,
+  );
+  assert.deepEqual(
+    database
+      .prepare("SELECT * FROM users WHERE email = ?")
+      .get("admin@gmail.com"),
+    originalAdmin,
+  );
+  assert.equal(originalAdmin.role, "admin");
+  assert.notEqual(originalAdmin.password_hash, "admin123");
+  assert.equal(
+    await bcrypt.compare("admin123", originalAdmin.password_hash),
+    true,
+  );
+  assert.equal(
+    (
+      database.prepare("SELECT COUNT(*) AS count FROM users").get() as {
+        count: number;
+      }
+    ).count,
+    2,
+  );
+});
+
+test("admin can login, read /me and load only its own dashboard", async () => {
+  const admin = await login(false, undefined, "admin");
+  assert.equal(admin.body.user.role, "admin");
+  assert.equal(admin.body.user.name, "Admin");
+  assert.equal("password_hash" in admin.body.user, false);
+  const me = await request("/auth/me", { token: admin.body.accessToken });
+  assert.equal(me.status, 200);
+  assert.equal(((await me.json()) as { role: string }).role, "admin");
+  const dashboard = await request("/admin/dashboard", {
+    token: admin.body.accessToken,
+  });
+  assert.equal(dashboard.status, 200);
+  assert.equal(dashboard.headers.get("cache-control"), "no-store");
+  assert.equal(
+    ((await dashboard.json()) as { message: string }).message,
+    "คุณสามารถเข้าถึงส่วนจัดการระบบได้",
+  );
+  assert.equal(
+    (await request("/user/dashboard", { token: admin.body.accessToken }))
+      .status,
+    403,
+  );
+});
+
+test("user cannot access admin APIs even with frontend or JWT role spoofing", async () => {
+  const user = await login();
+  assert.equal(
+    (await request("/admin/dashboard", { token: user.body.accessToken }))
+      .status,
+    403,
+  );
+  assert.equal(
+    (
+      await request("/admin/dashboard?role=admin", {
+        token: user.body.accessToken,
+      })
+    ).status,
+    403,
+  );
+  const forgedRole = jwt.sign(
+    {
+      sub: user.body.user.id,
+      sid: sessionId(user.body.accessToken),
+      role: "admin",
+    },
+    config.jwtSecret,
+    {
+      expiresIn: 60,
+      issuer: "authen-mini-project",
+      audience: "user-app",
+    },
+  );
+  assert.equal(
+    (await request("/admin/dashboard", { token: forgedRole })).status,
+    403,
+  );
+  const loginWithRole = await request("/auth/login", {
+    method: "POST",
+    body: {
+      email: "moodeng@gmail.com",
+      password: "moodeng123",
+      rememberMe: false,
+      role: "admin",
+    },
+  });
+  assert.equal(loginWithRole.status, 200);
+  assert.equal(
+    ((await loginWithRole.json()) as { user: { role: string } }).user.role,
+    "user",
+  );
+  assert.equal((await request("/admin/dashboard")).status, 401);
+  assert.equal(
+    (await request("/admin/dashboard", { token: "forged" })).status,
+    401,
+  );
+});
+
+test("the next request and refresh use a changed database role without trusting old claims", async () => {
+  const user = await login(true);
+  try {
+    database
+      .prepare("UPDATE users SET role = 'admin' WHERE id = ?")
+      .run(user.body.user.id);
+    assert.equal(
+      (await request("/user/dashboard", { token: user.body.accessToken }))
+        .status,
+      403,
+    );
+    assert.equal(
+      (await request("/admin/dashboard", { token: user.body.accessToken }))
+        .status,
+      200,
+    );
+    const me = await request("/auth/me", { token: user.body.accessToken });
+    assert.equal(((await me.json()) as { role: string }).role, "admin");
+    const refresh = await request("/auth/refresh", {
+      method: "POST",
+      cookie: user.cookie,
+    });
+    assert.equal(refresh.status, 200);
+    assert.equal(
+      ((await refresh.json()) as { user: { role: string } }).user.role,
+      "admin",
+    );
+  } finally {
+    database
+      .prepare("UPDATE users SET role = 'user' WHERE id = ?")
+      .run(user.body.user.id);
+  }
+});
+
+test("temporary admin session expires, cannot refresh and can logout with an expired signed token", async () => {
+  const admin = await login(false, undefined, "admin");
+  const expired = jwt.sign(
+    { sub: admin.body.user.id, sid: sessionId(admin.body.accessToken), exp: 1 },
+    config.jwtSecret,
+    {
+      issuer: "authen-mini-project",
+      audience: "user-app",
+    },
+  );
+  assert.equal(
+    (await request("/admin/dashboard", { token: expired })).status,
+    401,
+  );
+  assert.equal(
+    (await request("/auth/refresh", { method: "POST" })).status,
+    401,
+  );
+  assert.equal(
+    (await request("/auth/logout", { method: "POST", token: expired })).status,
+    204,
+  );
+  assert.equal(
+    (await request("/admin/dashboard", { token: admin.body.accessToken }))
+      .status,
+    401,
+  );
+  const expiredSession = await login(false, undefined, "admin");
+  database
+    .prepare("UPDATE sessions SET expires_at = ? WHERE id = ?")
+    .run(Date.now() - 1, sessionId(expiredSession.body.accessToken));
+  assert.equal(
+    (
+      await request("/admin/dashboard", {
+        token: expiredSession.body.accessToken,
+      })
+    ).status,
+    401,
+  );
+});
+
+test("remembered admin rotates refresh tokens, keeps its deadline and rejects both tokens after logout", async () => {
+  const admin = await login(true, undefined, "admin");
+  const id = sessionId(admin.body.accessToken);
+  const deadline = database
+    .prepare("SELECT expires_at FROM sessions WHERE id = ?")
+    .get(id);
+  const expired = jwt.sign(
+    { sub: admin.body.user.id, sid: id, exp: 1 },
+    config.jwtSecret,
+    {
+      issuer: "authen-mini-project",
+      audience: "user-app",
+    },
+  );
+  assert.equal(
+    (await request("/admin/dashboard", { token: expired })).status,
+    401,
+  );
+  const refresh = await request("/auth/refresh", {
+    method: "POST",
+    cookie: admin.cookie,
+  });
+  assert.equal(refresh.status, 200);
+  const body = (await refresh.json()) as {
+    accessToken: string;
+    user: { role: string };
+  };
+  const cookie = refresh.headers.get("set-cookie")!.split(";")[0]!;
+  assert.equal(body.user.role, "admin");
+  assert.equal(
+    (await request("/admin/dashboard", { token: body.accessToken })).status,
+    200,
+  );
+  assert.notEqual(cookie, admin.cookie);
+  assert.deepEqual(
+    database.prepare("SELECT expires_at FROM sessions WHERE id = ?").get(id),
+    deadline,
+  );
+  assert.equal(
+    (await request("/auth/refresh", { method: "POST", cookie: admin.cookie }))
+      .status,
+    401,
+  );
+  assert.equal(
+    (await request("/auth/logout", { method: "POST", cookie })).status,
+    204,
+  );
+  assert.equal(
+    (await request("/admin/dashboard", { token: body.accessToken })).status,
+    401,
+  );
+  assert.equal(
+    (await request("/auth/refresh", { method: "POST", cookie })).status,
+    401,
+  );
+});
+
+test("expired, revoked and mismatched remembered admin sessions cannot refresh", async () => {
+  for (const state of ["expired", "revoked", "mismatched"] as const) {
+    const admin = await login(true, undefined, "admin");
+    const id = sessionId(admin.body.accessToken);
+    if (state === "expired")
+      database
+        .prepare("UPDATE sessions SET expires_at = ? WHERE id = ?")
+        .run(Date.now() - 1, id);
+    if (state === "revoked")
+      database
+        .prepare("UPDATE sessions SET revoked_at = ? WHERE id = ?")
+        .run(Date.now(), id);
+    const cookie =
+      state === "mismatched" ? `user_refresh=${id}.wrong` : admin.cookie;
+    assert.equal(
+      (await request("/auth/refresh", { method: "POST", cookie })).status,
+      401,
+    );
+  }
 });

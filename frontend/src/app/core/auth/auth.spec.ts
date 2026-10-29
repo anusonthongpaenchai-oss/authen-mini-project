@@ -5,10 +5,10 @@ import { Router, provideRouter } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { AuthService, STORAGE_KEY } from './auth.service';
 import { authInterceptor } from './auth.interceptor';
-import { AuthResponse } from './auth.models';
-import { userGuard } from './auth.guard';
+import { AuthResponse, Role } from './auth.models';
+import { adminGuard, userGuard } from './auth.guard';
 
-describe('User authentication lifecycle', () => {
+describe.each(['user', 'admin'] as const)('%s authentication lifecycle', (role: Role) => {
   let auth: AuthService;
   let http: HttpTestingController;
   let client: HttpClient;
@@ -18,10 +18,21 @@ describe('User authentication lifecycle', () => {
     accessToken: token,
     expiresAt: Date.now() + 60000,
     rememberMe,
-    user: { id: 'user-1', email: 'moodeng@gmail.com', name: 'Moodeng', role: 'user' },
+    user: {
+      id: `${role}-1`,
+      email: role === 'admin' ? 'admin@gmail.com' : 'moodeng@gmail.com',
+      name: role === 'admin' ? 'Admin' : 'Moodeng',
+      role,
+    },
   });
   function login(rememberMe = true) {
-    auth.login('moodeng@gmail.com', 'moodeng123', rememberMe).subscribe();
+    auth
+      .login(
+        role === 'admin' ? 'admin@gmail.com' : 'moodeng@gmail.com',
+        role === 'admin' ? 'admin123' : 'moodeng123',
+        rememberMe,
+      )
+      .subscribe();
     const request = http.expectOne(`${api}/auth/login`);
     expect(request.request.withCredentials).toBe(true);
     expect(request.request.body.rememberMe).toBe(rememberMe);
@@ -92,8 +103,9 @@ describe('User authentication lifecycle', () => {
     expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
-  it('waits for session restoration before the User guard resolves', async () => {
-    const result = TestBed.runInInjectionContext(() => userGuard({} as never, {} as never));
+  it('waits for session restoration before the role guard resolves', async () => {
+    const guard = role === 'admin' ? adminGuard : userGuard;
+    const result = TestBed.runInInjectionContext(() => guard({} as never, {} as never));
     let allowed: unknown;
     (result as ReturnType<AuthService['initialize']>).subscribe((value) => {
       allowed = value;
@@ -124,13 +136,13 @@ describe('User authentication lifecycle', () => {
 
   it('shares one refresh for concurrent 401s and retries both requests with the new token', () => {
     login();
-    client.get(`${api}/user/dashboard`).subscribe();
+    client.get(`${api}/${role}/dashboard`).subscribe();
     client.get(`${api}/auth/me`).subscribe();
-    http.expectOne(`${api}/user/dashboard`).flush({}, { status: 401, statusText: 'Expired' });
+    http.expectOne(`${api}/${role}/dashboard`).flush({}, { status: 401, statusText: 'Expired' });
     http.expectOne(`${api}/auth/me`).flush({}, { status: 401, statusText: 'Expired' });
     http.expectOne(`${api}/auth/refresh`).flush(response(true, 'access-2'));
     const retries = http.match(
-      (request) => request.url === `${api}/user/dashboard` || request.url === `${api}/auth/me`,
+      (request) => request.url === `${api}/${role}/dashboard` || request.url === `${api}/auth/me`,
     );
     expect(retries.length).toBe(2);
     retries.forEach((request) => {
@@ -142,12 +154,12 @@ describe('User authentication lifecycle', () => {
 
   it('reuses a refreshed token for a late 401 without issuing another refresh', () => {
     login();
-    client.get(`${api}/user/dashboard`).subscribe();
+    client.get(`${api}/${role}/dashboard`).subscribe();
     client.get(`${api}/auth/me`).subscribe();
     const late = http.expectOne(`${api}/auth/me`);
-    http.expectOne(`${api}/user/dashboard`).flush({}, { status: 401, statusText: 'Expired' });
+    http.expectOne(`${api}/${role}/dashboard`).flush({}, { status: 401, statusText: 'Expired' });
     http.expectOne(`${api}/auth/refresh`).flush(response(true, 'access-2'));
-    http.expectOne(`${api}/user/dashboard`).flush({});
+    http.expectOne(`${api}/${role}/dashboard`).flush({});
     late.flush({}, { status: 401, statusText: 'Expired' });
     const retried = http.expectOne(`${api}/auth/me`);
     expect(retried.request.headers.get('Authorization')).toBe('Bearer access-2');
@@ -158,8 +170,8 @@ describe('User authentication lifecycle', () => {
   it('clears the session when refresh is rejected and never loops', () => {
     login();
     let errors = 0;
-    client.get(`${api}/user/dashboard`).subscribe({ error: () => errors++ });
-    http.expectOne(`${api}/user/dashboard`).flush({}, { status: 401, statusText: 'Expired' });
+    client.get(`${api}/${role}/dashboard`).subscribe({ error: () => errors++ });
+    http.expectOne(`${api}/${role}/dashboard`).flush({}, { status: 401, statusText: 'Expired' });
     http.expectOne(`${api}/auth/refresh`).flush({}, { status: 401, statusText: 'Revoked' });
     expect(errors).toBe(1);
     expect(auth.user()).toBeNull();
@@ -169,10 +181,12 @@ describe('User authentication lifecycle', () => {
 
   it('retries the original API at most once even if its new token is rejected', () => {
     login();
-    client.get(`${api}/user/dashboard`).subscribe({ error: () => {} });
-    http.expectOne(`${api}/user/dashboard`).flush({}, { status: 401, statusText: 'Expired' });
+    client.get(`${api}/${role}/dashboard`).subscribe({ error: () => {} });
+    http.expectOne(`${api}/${role}/dashboard`).flush({}, { status: 401, statusText: 'Expired' });
     http.expectOne(`${api}/auth/refresh`).flush(response(true, 'access-2'));
-    http.expectOne(`${api}/user/dashboard`).flush({}, { status: 401, statusText: 'Unauthorized' });
+    http
+      .expectOne(`${api}/${role}/dashboard`)
+      .flush({}, { status: 401, statusText: 'Unauthorized' });
     expect(auth.user()).toBeNull();
     http.expectNone(`${api}/auth/refresh`);
   });
@@ -183,11 +197,11 @@ describe('User authentication lifecycle', () => {
     const external = http.expectOne('https://other.example/api/data');
     expect(external.request.headers.has('Authorization')).toBe(false);
     external.flush({}, { status: 401, statusText: 'Unauthorized' });
-    client.get(`${api}/user/dashboard`).subscribe({ error: () => {} });
-    http.expectOne(`${api}/user/dashboard`).flush({}, { status: 403, statusText: 'Forbidden' });
+    client.get(`${api}/${role}/dashboard`).subscribe({ error: () => {} });
+    http.expectOne(`${api}/${role}/dashboard`).flush({}, { status: 403, statusText: 'Forbidden' });
     expect(auth.user()).not.toBeNull();
-    client.get(`${api}/user/dashboard`).subscribe({ error: () => {} });
-    http.expectOne(`${api}/user/dashboard`).flush({}, { status: 401, statusText: 'Expired' });
+    client.get(`${api}/${role}/dashboard`).subscribe({ error: () => {} });
+    http.expectOne(`${api}/${role}/dashboard`).flush({}, { status: 401, statusText: 'Expired' });
     expect(auth.user()).toBeNull();
     auth.login('wrong@example.com', 'wrong', true).subscribe({ error: () => {} });
     http
@@ -198,8 +212,8 @@ describe('User authentication lifecycle', () => {
 
   it('retains the remembered session after a network error so a user can retry', () => {
     login();
-    client.get(`${api}/user/dashboard`).subscribe({ error: () => {} });
-    http.expectOne(`${api}/user/dashboard`).flush({}, { status: 401, statusText: 'Expired' });
+    client.get(`${api}/${role}/dashboard`).subscribe({ error: () => {} });
+    http.expectOne(`${api}/${role}/dashboard`).flush({}, { status: 401, statusText: 'Expired' });
     http.expectOne(`${api}/auth/refresh`).error(new ProgressEvent('error'));
     expect(auth.user()).not.toBeNull();
     expect(auth.notice()).toContain('เชื่อมต่อ');

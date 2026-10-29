@@ -1,6 +1,6 @@
 # Authentication & Role-Based Access Mini Project
 
-Angular + Express/TypeScript + SQLite — รอบนี้พัฒนาเฉพาะ **User** บน branch `feat/user` รวม Login, Remember Me, User Dashboard และ Logout ยังไม่มี feature Admin
+Angular + Express/TypeScript + SQLite — รองรับ **Admin และ User** บน branch `feat/admin` ใช้ Login, Remember Me, Token Lifecycle และ Logout ร่วมกัน พร้อม Dashboard/API แยกตาม Role
 
 ## ติดตั้งและรัน
 
@@ -37,8 +37,22 @@ SQLite อยู่ใน `backend/src/db/auth.sqlite` และถูก ignore
 | Email | Password | ชื่อ | Role |
 |---|---|---|---|
 | `moodeng@gmail.com` | `moodeng123` | Moodeng | user |
+| `admin@gmail.com` | `admin123` | Admin | admin |
 
-Password ในฐานข้อมูลเป็น bcrypt hash (cost 12) บัญชีนี้ใช้สำหรับ Demo เท่านั้น
+Password ในฐานข้อมูลเป็น bcrypt hash (cost 12) ทั้งสองบัญชีใช้สำหรับ Demo เท่านั้น `npm run db:seed` เตรียมทั้งสองบัญชีและรักษาข้อมูลบัญชีเดิมไว้ ไม่จำเป็นต้องเปลี่ยน Schema หรือสร้างฐานข้อมูลใหม่
+
+## Dashboard และสิทธิ์
+
+| Role | หน้า Dashboard | API ที่อนุญาต |
+|---|---|---|
+| User | `/dashboard` | `/api/user/dashboard` |
+| Admin | `/admin/dashboard` | `/api/admin/dashboard` |
+
+ใช้หน้า `/login` เดียว ไม่มีตัวเลือก Role ในฟอร์ม ระบบนำทางตามข้อมูลผู้ใช้จาก Backend หลัง Login หรือกู้ Session หากเข้าหน้าข้าม Role จะถูกส่งกลับ Dashboard ของตนเอง ส่วนการเรียก API ข้าม Role โดยตรงตอบ `403` ทั้งสองทิศทาง Admin ไม่ได้สิทธิ์ User โดยอัตโนมัติ
+
+User เห็นข้อความ “คุณสามารถเข้าถึงข้อมูลส่วนตัวของคุณได้” ส่วน Admin เห็น “คุณสามารถเข้าถึงส่วนจัดการระบบได้” โดยโหลดจาก API ของแต่ละ Role จริง
+
+Backend แยก `authenticate` สำหรับตรวจ JWT/Session และอ่านผู้ใช้จากฐานข้อมูล ออกจาก `authorizeRole` สำหรับตรวจสิทธิ์ Endpoint ส่วน `/api/auth/me` ใช้ Authentication ร่วมกันได้ทั้งสอง Role Guard ของ Angular ใช้ควบคุมการนำทางเท่านั้น สิทธิ์เข้าถึงข้อมูลตรวจที่ Backend เสมอ
 
 ## Config
 
@@ -50,8 +64,6 @@ Password ในฐานข้อมูลเป็น bcrypt hash (cost 12) บ
 | `ACCESS_TOKEN_SECONDS` | `300` (5 นาที) |
 | `REFRESH_SESSION_SECONDS` | `604800` (7 วัน) |
 | `COOKIE_SECURE` | `false` สำหรับ HTTP localhost; ใช้ `true` เมื่อ Backend ใช้ HTTPS |
-
-TTL ต้องเป็นจำนวนเต็มบวก หาก Frontend Origin เป็น HTTPS ระบบจะบังคับ Secure Cookie และ Production ไม่อนุญาต Cookie แบบไม่ Secure การ Deploy ต้องให้ Frontend/Backend อยู่ในบริบท same-site ที่รองรับ `SameSite=Lax`
 
 Frontend ใช้ API base `http://localhost:3000/api` กำหนดผ่าน Injection Token `API_BASE` ใน `frontend/src/app/core/auth/auth.models.ts` หากเปลี่ยน Backend Port ต้องปรับค่านี้ด้วย
 
@@ -67,7 +79,7 @@ Frontend ใช้ API base `http://localhost:3000/api` กำหนดผ่า
 | Refresh Token | ไม่มี | ค่าสุ่ม 256 บิต พร้อม Session ID ใน HttpOnly Cookie |
 
 - JWT มี User ID (`sub`), Session ID (`sid`), `exp`, issuer และ audience ไม่ใช้ Role จาก Frontend เป็นหลักฐานสิทธิ์
-- ทุก Protected Request ตรวจลายเซ็น JWT, อายุ Token, Session ที่ไม่หมดอายุ/ไม่ถูกเพิกถอน และ Role `user` จากฐานข้อมูล แม้แก้ Role ใน Browser ก็ไม่ได้สิทธิ์เพิ่ม
+- ทุก Protected Request ตรวจลายเซ็น JWT, อายุ Token และ Session ที่ไม่หมดอายุ/ไม่ถูกเพิกถอน Dashboard API ตรวจ Role `user` หรือ `admin` จากฐานข้อมูลทุกครั้ง แม้แก้ Role ใน Browser/JWT ก็ไม่ได้สิทธิ์เพิ่ม การเปลี่ยน Role ในฐานข้อมูลมีผลกับ Request ถัดไป
 - Refresh Cookie ชื่อ `user_refresh`, Path `/api/auth`, `HttpOnly`, `SameSite=Lax`, `Secure` เมื่อใช้ HTTPS และมี Expires ตรงกับวันหมดอายุสูงสุดของ Session
 - ฐานข้อมูลเก็บเฉพาะ SHA-256 hash ของ Refresh Token ซึ่งมี entropy สูง เปลี่ยน Token แบบ Atomic ใน SQLite Transaction ทุกครั้งที่ Refresh ค่าเก่าใช้ซ้ำไม่ได้
 - Access Token ที่ออกใหม่มีอายุไม่เกินอายุ Session ที่เหลือ การเปลี่ยน Secret ทำให้ Access Token เดิมใช้ไม่ได้
@@ -75,8 +87,9 @@ Frontend ใช้ API base `http://localhost:3000/api` กำหนดผ่า
 - เมื่อ Refresh ถูกปฏิเสธ จะกลับ Login; หากเป็น Network Error/Timeout จะแจ้งให้ลองใหม่ ไม่วนส่งคำขออัตโนมัติ
 - Logout เพิกถอน Session ในฐานข้อมูลและล้าง Cookie จึงปฏิเสธ Access/Refresh Token เดิมทันที รับได้ทั้ง Access Token ที่หมดอายุแต่ลายเซ็นถูกต้อง หรือ Refresh Cookie
 - UI ล้างสถานะหลัง Backend ยืนยัน Logout สำเร็จ หากเครือข่ายขัดข้องจะแสดง Error และให้ลอง Logout ใหม่
-- มุมขวาบน Dashboard แสดงเวลาที่เหลือของ Access Token แบบ `MM:SS` อัปเดตทุกวินาที พร้อมสถานะกำลัง Refresh และนับใหม่เมื่อได้ Token ใหม่ เมื่อ Remember Me นับถึงศูนย์จะรอ Refresh ตอนเรียก API; Session ชั่วคราวจะกลับ Login ตามนโยบายเดิม
+- ทั้งสอง Dashboard ใช้ Component ตัวนับถอยหลังร่วมกัน วางด้านขวาใต้เนื้อหาตาม Layout ปัจจุบัน แสดงเวลาที่เหลือของ Access Token แบบ `MM:SS` อัปเดตทุกวินาที พร้อมสถานะกำลัง Refresh และนับใหม่เมื่อได้ Token ใหม่ เมื่อ Remember Me นับถึงศูนย์จะรอ Refresh ตอนเรียก API; Session ชั่วคราวจะกลับ Login ตามนโยบายเดิม
 - Login ครั้งใหม่จะเพิกถอน Session ของ Refresh Cookie เดิมที่ส่งมา โดยเฉพาะเมื่อเปลี่ยนเป็นไม่ Remember Me จะล้าง Cookie เดิมด้วย
+- ทั้งสอง Role ใช้นโยบายอายุ Token/Session เดียวกัน คงชื่อ Cookie `user_refresh`, Storage Key `user-auth`, JWT issuer `authen-mini-project` และ audience `user-app` เดิมเพื่อรองรับ Session ฝั่ง User เดิม
 
 ## API
 
@@ -87,6 +100,7 @@ Frontend ใช้ API base `http://localhost:3000/api` กำหนดผ่า
 | POST | `/api/auth/logout` | ใช้ Bearer Token/Refresh Cookie; สำเร็จ `204` แบบ idempotent |
 | GET | `/api/auth/me` | Bearer Token; คืน `{ id, email, name, role }` |
 | GET | `/api/user/dashboard` | Bearer Token + Role User; คืน `{ user, message }` |
+| GET | `/api/admin/dashboard` | Bearer Token + Role Admin; คืน `{ user, message }` |
 | GET | `/api/health` | ตรวจ Backend/SQLite โดยไม่ต้อง Login |
 
 `expiresAt` เป็น Unix milliseconds ส่วน Error ใช้ `{ code, message }`: `400` ข้อมูลไม่ถูกต้อง, `401` Login/Session ไม่ผ่าน, `403` Role/Origin ไม่ได้รับอนุญาต, `500` ระบบขัดข้อง ไม่คืน Password Hash หรือ Refresh Token ใน JSON
@@ -111,7 +125,7 @@ REFRESH_SESSION_SECONDS=600
 
 **ไม่ Remember Me**
 
-1. Login โดยไม่ติ๊ก Checkbox ต้องเห็นชื่อ Moodeng, Role user และ User Dashboard
+1. Login โดยไม่ติ๊ก Checkbox: บัญชี Moodeng ไป User Dashboard ส่วนบัญชี Admin ไป Admin Dashboard แสดงชื่อและ Role ตรงกับบัญชี
 2. รีโหลดภายใน 60 วินาที ต้องใช้งานต่อได้ด้วย Token เดิม โดยไม่เรียก `/auth/refresh`
 3. รอครบ 60 วินาทีจาก Login โดยไม่ต้องกดอะไร ต้องกลับหน้า Login พร้อมข้อความ Session หมดอายุ และไม่มี Refresh Request
 4. Login ใหม่แล้ว Logout ก่อนหมดอายุ เก็บ Access Token ก่อน Logout ไว้ทดสอบ `/auth/me` อีกครั้ง ต้องได้ `401`
@@ -127,6 +141,13 @@ REFRESH_SESSION_SECONDS=600
 
 ทดสอบ Backend ปิดชั่วคราวระหว่างโหลด/Refresh/Logout ต้องเห็น Error และลองใหม่ได้ โดยไม่มี Refresh Loop
 
+ทำขั้นตอน Remember Me ทั้งสองแบบซ้ำกับบัญชี Admin ด้วย ตรวจการแยกสิทธิ์เพิ่มเติมดังนี้:
+
+1. Login เป็น User แล้วเปิด `/admin/dashboard` ต้องกลับ `/dashboard`
+2. Login เป็น Admin แล้วเปิด `/dashboard` ต้องกลับ `/admin/dashboard`
+3. ใช้ User Bearer Token เรียก `/api/admin/dashboard` โดยตรงต้องได้ `403`; ใช้ Admin Token เรียก `/api/user/dashboard` ต้องได้ `403` เช่นกัน
+4. รีโหลด `/login` ขณะมี Session ที่ใช้ได้ ต้องกู้ Session และนำกลับ Dashboard ตาม Role
+
 ## Build และ Automated Tests
 
 ```bash
@@ -141,34 +162,6 @@ npm run build
 npm test -- --watch=false
 ```
 
-Backend integration tests ใช้ SQLite ในหน่วยความจำและ HTTP Server บน localhost port ชั่วคราว ไม่แก้ฐานข้อมูลจริง ครอบคลุม Config, Seed, Credentials, Token หมดอายุ/ปลอม, Refresh Rotation/Replay/Concurrent Requests, Logout, Origin และ Role Fixture ที่ไม่ใช่ User
+Backend integration tests ใช้ SQLite ในหน่วยความจำและ HTTP Server บน localhost port ชั่วคราว ไม่แก้ฐานข้อมูลจริง ครอบคลุม Config, Seed ทั้งสองบัญชี, Credentials, Token หมดอายุ/ปลอม, Refresh Rotation/Replay/Concurrent Requests, Logout, Origin, การปฏิเสธ API ข้าม Role, Role ปลอมจาก Frontend/JWT และ Role ที่เปลี่ยนในฐานข้อมูล
 
-Angular tests ครอบคลุม Validation/Loading/Error, Reload, Timer หมดอายุโดยไม่เรียก API, Guard ที่รอกู้ Session, Single-flight Refresh, Late 401, Retry Limit, Network Failure, Logout และ Refresh Response ที่มาถึงหลัง Logout
-
-ผลตรวจล่าสุด: Backend Build ผ่านและ Tests ผ่าน 15 กรณี; Frontend Build ผ่านและ Tests ผ่าน 22 กรณี รวม 37 กรณี รวมการนับถอยหลังและเริ่มนับใหม่หลัง Refresh ตรวจบน Chrome ก่อนเพิ่มตัวนับถอยหลังด้วย Access TTL 15 วินาที/Refresh TTL 120 วินาที: Login ทั้งสองแบบ, รีโหลด Session ชั่วคราวก่อนหมดอายุ, กลับ Login เมื่อหมดอายุ, กู้ Remember Me หลังรีโหลด, โหลดข้อมูลหลัง Access Token หมดอายุ และ Logout สำเร็จ
-
-## ความคืบหน้าตาม Tasks เดิม
-
-| Task | สถานะ |
-|---|---|
-| 1. Token Strategy และ Config | เสร็จ |
-| 2. บัญชีและ Session | เสร็จเฉพาะ User; ไม่มี Seed Admin |
-| 3. Backend Authentication และ Authorization | เสร็จเฉพาะ User; ไม่มี Admin API หรือ middleware หลาย Role |
-| 4. Angular Login และ Token Lifecycle | เสร็จสำหรับ User |
-| 5. Dashboard และ Logout | เสร็จเฉพาะ User |
-| 6. Tests | มี Automated Tests สำหรับขอบเขต User; งานทดสอบ feature Admin ยังเหลือ |
-| 7. README | เสร็จสำหรับขอบเขตรอบนี้ |
-
-## ข้อจำกัดและงานที่ยังเหลือ
-
-- ยังไม่มี feature Admin, สมัครสมาชิก, ลืมรหัสผ่าน หรือระบบจัดการผู้ใช้ ตามขอบเขตรอบนี้
-- `sessionStorage` อ่านได้ด้วย JavaScript จึงมีความเสี่ยงเมื่อเกิด XSS; HttpOnly ป้องกันการอ่าน Refresh Token แต่ไม่ป้องกัน XSS ทุกกรณี
-- การปิดแท็บปกติจะล้าง sessionStorage แต่ Browser บางตัวอาจกู้ข้อมูลนี้เมื่อ Restore Session จึงใช้อายุ Token ฝั่ง Server เป็นขอบเขตจริง
-- ทุก Protected Request ต้องอ่าน SQLite เพื่อให้การเพิกถอนมีผลทันที เหมาะกับ Mini Project; ยังไม่มี Session Cleanup/Rate Limiting/Audit Log หรือการจัดการหลายเครื่อง
-- การรวม Refresh ทำในแอปหนึ่ง instance เท่านั้น ยังไม่มีการประสานระหว่างหลายแท็บ การ Refresh พร้อมกันข้ามแท็บอาจทำให้แท็บหนึ่งถูกบังคับ Login ใหม่
-- ไม่เก็บประวัติ Token เก่าสำหรับตรวจจับการขโมยทั้ง Token Family; ปฏิเสธ Token เก่าด้วย Hash ปัจจุบัน หากคำตอบ Refresh สูญหายก่อน Cookie ถูกอัปเดต อาจต้อง Login ใหม่
-- UI ภาษาไทยแบบเรียบง่าย เน้นความถูกต้องของ Session; ต้องตั้งค่า HTTPS, Secret และ Origin ให้เหมาะสมก่อน Deploy จริง
-
-## Tailwind CSS Convention
-
-เรียง Class ที่เพิ่ม/แก้ตาม **Layout → Position and alignment → Spacing → Size → Color → Border decoration → Responsive** โดยวาง `sm:`, `md:`, `lg:` ไว้ท้าย ไม่ใช้ Plugin เรียง Class ที่เปลี่ยนลำดับนี้
+Angular tests ครอบคลุม Validation/Loading/Error, การนำทางหลัง Login/กู้ Session ตาม Role, การป้องกันหน้าข้าม Role, Role ใน sessionStorage ที่ถูกแก้ไข, Reload, Timer หมดอายุโดยไม่เรียก API, Guard ที่รอกู้ Session, Single-flight Refresh, Late 401, Retry Limit, Network Failure, Logout และ Refresh Response ที่มาถึงหลัง Logout โดยรัน Token Lifecycle และตัวนับถอยหลังทั้งสอง Role
