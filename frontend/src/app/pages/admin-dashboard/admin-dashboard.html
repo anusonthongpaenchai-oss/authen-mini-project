@@ -1,0 +1,64 @@
+<main class="p-6 min-h-screen bg-slate-100 text-slate-900 md:p-10">
+  <div class="mx-auto max-w-3xl">
+    <header class="flex flex-col gap-4 mb-6 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <p class="mb-1 text-sm font-semibold text-indigo-700">ADMIN DASHBOARD</p>
+        <h1 class="text-3xl font-bold">ยินดีต้อนรับ Admin</h1>
+      </div>
+      <button
+        type="button"
+        class="px-4 py-2 text-sm font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50"
+        [disabled]="auth.loggingOut() || loading() || auth.refreshing()"
+        (click)="logout()"
+      >
+        {{ auth.loggingOut() ? 'กำลังออกจากระบบ…' : 'Logout' }}
+      </button>
+    </header>
+    <section class="p-6 bg-white border border-slate-200 rounded-2xl shadow-sm md:p-8">
+      <h2 class="mb-4 text-xl font-semibold">ส่วนจัดการระบบ</h2>
+      <dl class="grid gap-3 text-sm sm:grid-cols-2">
+        <div>
+          <dt class="text-slate-500">ชื่อ</dt>
+          <dd class="mt-1 font-medium">{{ auth.user()?.name }}</dd>
+        </div>
+        <div>
+          <dt class="text-slate-500">Role</dt>
+          <dd class="mt-1 font-medium">{{ auth.user()?.role }}</dd>
+        </div>
+        <div>
+          <dt class="text-slate-500">Email</dt>
+          <dd class="mt-1 font-medium">{{ auth.user()?.email }}</dd>
+        </div>
+        <div>
+          <dt class="text-slate-500">รูปแบบ Session</dt>
+          <dd class="mt-1 font-medium">
+            {{ auth.rememberMe() ? 'Remember Me' : 'ชั่วคราว · ไม่ต่ออายุอัตโนมัติ' }}
+          </dd>
+        </div>
+      </dl>
+      @if (loading() || auth.refreshing()) {
+        <p class="mt-6 text-sm text-indigo-700" role="status">
+          {{ auth.refreshing() ? 'กำลังต่ออายุ Session…' : 'กำลังโหลดข้อมูล…' }}
+        </p>
+      }
+      @if (message()) {
+        <p class="mt-6 p-4 text-indigo-900 bg-indigo-50 rounded-xl">{{ message() }}</p>
+      }
+      @if (auth.notice()) {
+        <p class="mt-4 text-sm text-slate-600" role="status">{{ auth.notice() }}</p>
+      }
+      @if (error()) {
+        <p class="mt-4 p-3 text-sm text-red-800 bg-red-50 rounded-lg" role="alert">{{ error() }}</p>
+      }
+      <button
+        type="button"
+        class="mt-6 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+        [disabled]="loading() || auth.loggingOut()"
+        (click)="load()"
+      >
+        โหลดข้อมูลอีกครั้ง
+      </button>
+    </section>
+    <app-session-timer />
+  </div>
+</main>
