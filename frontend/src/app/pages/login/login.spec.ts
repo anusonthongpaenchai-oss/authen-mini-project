@@ -1,7 +1,8 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
+import { AuthService } from '../../core/auth/auth.service';
 import { Login } from './login';
 
 describe('Login', () => {
@@ -41,4 +42,46 @@ describe('Login', () => {
     expect(fixture.nativeElement.querySelector('button[type="submit"]').disabled).toBe(false);
     http.verify();
   });
+
+  for (const role of ['user', 'admin'] as const) {
+    it(`redirects ${role} to its dashboard after Login without sending a role selector`, () => {
+      const fixture = TestBed.createComponent(Login);
+      const router = TestBed.inject(Router);
+      const navigate = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+      const email = role === 'admin' ? 'admin@gmail.com' : 'moodeng@gmail.com';
+      fixture.componentInstance.form.setValue({ email, password: 'password', rememberMe: true });
+      fixture.componentInstance.submit();
+      const http = TestBed.inject(HttpTestingController);
+      const request = http.expectOne('http://localhost:3000/api/auth/login');
+      expect(request.request.body.role).toBeUndefined();
+      request.flush({
+        user: { id: role, name: role, email, role },
+        rememberMe: true,
+        accessToken: 'token',
+        expiresAt: Date.now() + 60000,
+      });
+      expect(navigate).toHaveBeenCalledWith(role === 'admin' ? '/admin/dashboard' : '/dashboard');
+      http.verify();
+      navigate.mockRestore();
+    });
+
+    it(`redirects ${role} to its dashboard after recovering a remembered session`, () => {
+      const fixture = TestBed.createComponent(Login);
+      const auth = TestBed.inject(AuthService);
+      sessionStorage.clear();
+      const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+      fixture.componentInstance.recover();
+      const http = TestBed.inject(HttpTestingController);
+      http.expectOne('http://localhost:3000/api/auth/refresh').flush({
+        user: { id: role, name: role, email: `${role}@example.com`, role },
+        rememberMe: true,
+        accessToken: 'token',
+        expiresAt: Date.now() + 60000,
+      });
+      expect(auth.user()?.role).toBe(role);
+      expect(navigate).toHaveBeenCalledWith(role === 'admin' ? '/admin/dashboard' : '/dashboard');
+      http.verify();
+      navigate.mockRestore();
+    });
+  }
 });

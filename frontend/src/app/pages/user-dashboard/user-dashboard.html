@@ -60,21 +60,6 @@
       </button>
     </section>
 
-    <div
-      class="flex flex-col gap-2 mt-4 ml-auto w-fit px-4 py-3 text-right bg-white border border-slate-200 rounded-xl"
-      data-testid="session-timer"
-      [attr.aria-busy]="auth.refreshing()"
-    >
-      <p class="text-xs font-medium text-slate-500">Access Token หมดอายุใน</p>
-      <p class="mt-1 text-xl font-semibold tabular-nums text-indigo-700">
-        @if (auth.refreshing()) {
-          <span role="status">กำลัง Refresh…</span>
-        } @else {
-          <span role="timer" aria-label="เวลาที่เหลือของ Access Token" aria-live="off">{{
-            tokenCountdown()
-          }}</span>
-        }
-      </p>
-    </div>
+    <app-session-timer />
   </div>
 </main>

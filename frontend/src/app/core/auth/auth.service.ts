@@ -1,5 +1,5 @@
 import { HttpClient, HttpContext, HttpContextToken, HttpErrorResponse } from '@angular/common/http';
-import { DestroyRef, Injectable, inject, signal } from '@angular/core';
+import { computed, DestroyRef, Injectable, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import {
   Observable,
@@ -12,7 +12,7 @@ import {
   throwError,
   timeout,
 } from 'rxjs';
-import { API_BASE, AuthResponse, User } from './auth.models';
+import { API_BASE, AuthResponse, isRole, User } from './auth.models';
 
 export const SKIP_AUTH = new HttpContextToken(() => false);
 export const STORAGE_KEY = 'user-auth';
@@ -24,6 +24,9 @@ export class AuthService {
   private readonly router = inject(Router);
   readonly api = inject(API_BASE);
   readonly user = signal<User | null>(null);
+  readonly homeRoute = computed(() =>
+    this.user()?.role === 'admin' ? '/admin/dashboard' : '/dashboard',
+  );
   readonly accessToken = signal<string | null>(null);
   readonly rememberMe = signal(false);
   readonly refreshing = signal(false);
@@ -199,7 +202,7 @@ export class AuthService {
       typeof value?.accessToken === 'string' &&
       Number.isFinite(value?.expiresAt) &&
       typeof value?.rememberMe === 'boolean' &&
-      value?.user?.role === 'user' &&
+      isRole(value?.user?.role) &&
       typeof value.user.id === 'string' &&
       typeof value.user.name === 'string' &&
       typeof value.user.email === 'string'

@@ -7,7 +7,8 @@ import type { ErrorRequestHandler } from "express";
 import type { AuthConfig } from "./config.js";
 import { ApiError, AuthService, publicUser } from "./services/auth.js";
 import { createAuthRouter } from "./routes/auth.js";
-import { authorizeUser } from "./middlewares/authorize-user.js";
+import { authenticate } from "./middlewares/authenticate.js";
+import { authorizeRole } from "./middlewares/authorize-role.js";
 
 export function createApp(database: Database.Database, config: AuthConfig) {
   const app = express();
@@ -25,14 +26,28 @@ export function createApp(database: Database.Database, config: AuthConfig) {
   app.use("/api/health", createHealthCheckRouter(database));
   const auth = new AuthService(database, config);
   app.use("/api/auth", createAuthRouter(auth));
-  app.get("/api/user/dashboard", authorizeUser(auth), (_req, res) => {
-    res
-      .set("Cache-Control", "no-store")
-      .json({
+  app.get(
+    "/api/user/dashboard",
+    authenticate(auth),
+    authorizeRole("user"),
+    (_req, res) => {
+      res.set("Cache-Control", "no-store").json({
         user: publicUser(res.locals.auth.user),
         message: "คุณสามารถเข้าถึงข้อมูลส่วนตัวของคุณได้",
       });
-  });
+    },
+  );
+  app.get(
+    "/api/admin/dashboard",
+    authenticate(auth),
+    authorizeRole("admin"),
+    (_req, res) => {
+      res.set("Cache-Control", "no-store").json({
+        user: publicUser(res.locals.auth.user),
+        message: "คุณสามารถเข้าถึงส่วนจัดการระบบได้",
+      });
+    },
+  );
   const errors: ErrorRequestHandler = (error, _req, res, _next) => {
     if (error instanceof ApiError) {
       res
@@ -44,12 +59,10 @@ export function createApp(database: Database.Database, config: AuthConfig) {
       error?.type === "entity.parse.failed" ||
       error?.type === "entity.too.large"
     ) {
-      res
-        .status(400)
-        .json({
-          code: "INVALID_INPUT",
-          message: "รูปแบบข้อมูลไม่ถูกต้องหรือมีขนาดใหญ่เกินไป",
-        });
+      res.status(400).json({
+        code: "INVALID_INPUT",
+        message: "รูปแบบข้อมูลไม่ถูกต้องหรือมีขนาดใหญ่เกินไป",
+      });
       return;
     }
     console.error("Request failed", error);

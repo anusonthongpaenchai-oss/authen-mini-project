@@ -4,11 +4,14 @@ export const API_BASE = new InjectionToken<string>('API_BASE', {
   providedIn: 'root',
   factory: () => 'http://localhost:3000/api',
 });
+export type Role = 'user' | 'admin';
+export const isRole = (value: unknown): value is Role => value === 'user' || value === 'admin';
+
 export interface User {
   id: string;
   email: string;
   name: string;
-  role: 'user';
+  role: Role;
 }
 export interface AuthResponse {
   accessToken: string;

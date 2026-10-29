@@ -32,7 +32,7 @@ export class Login {
       .pipe(finalize(() => this.loading.set(false)))
       .subscribe({
         next: () => {
-          void this.router.navigateByUrl('/dashboard');
+          void this.router.navigateByUrl(this.auth.homeRoute());
         },
         error: (error) => this.error.set(this.auth.errorMessage(error)),
       });
@@ -45,7 +45,7 @@ export class Login {
       .initialize()
       .pipe(finalize(() => this.loading.set(false)))
       .subscribe((ok) => {
-        if (ok) void this.router.navigateByUrl('/dashboard');
+        if (ok) void this.router.navigateByUrl(this.auth.homeRoute());
       });
   }
 }

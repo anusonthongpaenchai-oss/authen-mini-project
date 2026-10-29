@@ -17,11 +17,15 @@ export class ApiError extends Error {
     super(message);
   }
 }
+export type Role = "user" | "admin";
+export const isRole = (value: unknown): value is Role =>
+  value === "user" || value === "admin";
+
 export interface UserRow {
   id: string;
   email: string;
   name: string;
-  role: string;
+  role: Role;
   password_hash: string;
 }
 export interface SessionRow {
@@ -62,10 +66,9 @@ export class AuthService {
       .prepare("SELECT * FROM sessions WHERE id = ?")
       .get(id) as SessionRow | undefined;
   }
-  requireUser(user: UserRow | undefined): UserRow {
+  requireAccount(user: UserRow | undefined): UserRow {
     if (!user) throw unauthorized();
-    if (user.role !== "user")
-      throw new ApiError(403, "FORBIDDEN", "คุณไม่มีสิทธิ์เข้าถึงส่วนของ User");
+    if (!isRole(user.role)) throw unauthorized();
     return user;
   }
   revoke(id: string) {
@@ -100,7 +103,7 @@ export class AuthService {
       const user = this.user(payload.sub);
       if (!user) throw unauthorized();
       // Logout identifies and revokes the signed session even if its user's role changed.
-      return { session, user: allowExpired ? user : this.requireUser(user) };
+      return { session, user: allowExpired ? user : this.requireAccount(user) };
     } catch (error) {
       if (error instanceof ApiError) throw error;
       throw unauthorized();
@@ -177,7 +180,7 @@ export class AuthService {
   rotate(token: unknown) {
     return this.database.transaction(() => {
       const session = this.refreshSession(token);
-      const user = this.requireUser(this.user(session.user_id));
+      const user = this.requireAccount(this.user(session.user_id));
       const refreshToken = this.refreshToken(session.id);
       this.database
         .prepare("UPDATE sessions SET refresh_token_hash = ? WHERE id = ?")

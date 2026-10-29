@@ -1,8 +1,9 @@
 import { Router } from "express";
 import type { CookieOptions } from "express";
 import bcrypt from "bcrypt";
-import { ApiError, AuthService, publicUser } from "../services/auth.js";
-import { authorizeUser } from "../middlewares/authorize-user.js";
+import { ApiError, AuthService, isRole, publicUser } from "../services/auth.js";
+import type { UserRow } from "../services/auth.js";
+import { authenticate } from "../middlewares/authenticate.js";
 
 const COOKIE = "user_refresh";
 // Used for unknown emails too, so both failure paths perform a bcrypt comparison.
@@ -50,13 +51,12 @@ export function createAuthRouter(auth: AuthService) {
     }
     const user = auth.database
       .prepare("SELECT * FROM users WHERE email = ?")
-      .get(email.trim().toLowerCase()) as
-      import("../services/auth.js").UserRow | undefined;
+      .get(email.trim().toLowerCase()) as UserRow | undefined;
     const matches = await bcrypt.compare(
       password,
       user?.password_hash ?? dummyHash,
     );
-    if (!user || !matches || user.role !== "user")
+    if (!user || !matches || !isRole(user.role))
       throw new ApiError(
         401,
         "INVALID_CREDENTIALS",
@@ -111,7 +111,7 @@ export function createAuthRouter(auth: AuthService) {
     // Idempotent: absence of valid credentials means there is no authenticated session to retain.
     res.status(204).end();
   });
-  router.get("/me", authorizeUser(auth), (_req, res) =>
+  router.get("/me", authenticate(auth), (_req, res) =>
     res.json(publicUser(res.locals.auth.user)),
   );
   return router;
