@@ -1,6 +1,6 @@
 # Authentication & Role-Based Access Mini Project
 
-Angular + Express/TypeScript + SQLite — รองรับ **Admin และ User** บน branch `feat/admin` ใช้ Login, Remember Me, Token Lifecycle และ Logout ร่วมกัน พร้อม Dashboard/API แยกตาม Role
+Angular + Express/TypeScript + SQLite — รองรับ **Admin และ User** ใช้ Login, Remember Me, Token Lifecycle และ Logout ร่วมกัน พร้อม Dashboard/API แยกตาม Role
 
 ## ติดตั้งและรัน
 
@@ -56,14 +56,16 @@ Backend แยก `authenticate` สำหรับตรวจ JWT/Session แ�
 
 ## Config
 
-| ตัวแปร | ค่าเริ่มต้น/ข้อกำหนด |
+| ตัวแปร | ค่า Demo ใน `.env.example` / ข้อกำหนด |
 |---|---|
 | `PORT` | `3000` |
 | `FRONTEND_ORIGIN` | `http://localhost:4200` ไม่มี `/` ท้าย |
 | `JWT_SECRET` | มีค่าสำหรับทดสอบใน `.env.example` แล้ว; อย่างน้อย 32 ตัวอักษร |
-| `ACCESS_TOKEN_SECONDS` | `300` (5 นาที) |
-| `REFRESH_SESSION_SECONDS` | `604800` (7 วัน) |
+| `ACCESS_TOKEN_SECONDS` | `30` (30 วินาที) |
+| `REFRESH_SESSION_SECONDS` | `60` (60 วินาที) |
 | `COOKIE_SECURE` | `false` สำหรับ HTTP localhost; ใช้ `true` เมื่อ Backend ใช้ HTTPS |
+
+เมื่อคัดลอก `.env.example` เป็น `.env` ระบบจึงใช้ Access Token อายุสูงสุด **30 วินาที** และ Remember Me Session อายุสูงสุด **60 วินาทีจาก Login** เพื่อทดสอบการหมดอายุได้เร็ว หากไม่ได้กำหนดตัวแปรอายุ Token ใน Environment ฟังก์ชัน `loadConfig()` จะใช้ค่า Fallback `300` วินาที (5 นาที) และ `604800` วินาที (7 วัน) ตามลำดับ ค่าใน `.env` จะทับค่า Fallback เหล่านี้ การเปลี่ยนอายุต้อง Restart Backend และ Login ใหม่จึงมีผลกับ Session ใหม่
 
 Frontend ใช้ API base `http://localhost:3000/api` กำหนดผ่าน Injection Token `API_BASE` ใน `frontend/src/app/core/auth/auth.models.ts` หากเปลี่ยน Backend Port ต้องปรับค่านี้ด้วย
 
@@ -71,12 +73,14 @@ Frontend ใช้ API base `http://localhost:3000/api` กำหนดผ่า
 
 | พฤติกรรม | ไม่ Remember Me | Remember Me |
 |---|---|---|
-| Access Token | JWT HS256 อายุสูงสุด 5 นาที | JWT HS256 อายุสูงสุด 5 นาที |
+| Access Token | JWT HS256 อายุสูงสุด 30 วินาที | JWT HS256 อายุสูงสุด 30 วินาที |
 | ที่เก็บ Access Token | `sessionStorage` ของแท็บ | หน่วยความจำของแอป |
 | รีโหลด | ตรวจ Token เดิมผ่าน `/auth/me` | ใช้ Refresh Cookie กู้ Session |
 | Access Token หมดอายุ | ล้างสถานะและกลับ Login ด้วย Timer/401 ไม่ Refresh | Refresh เมื่อ API ตอบ 401 แล้ว Retry หนึ่งครั้ง |
-| อายุ Session สูงสุด | เท่าอายุ Access Token | 7 วันนับจาก Login ไม่ขยายอายุเมื่อ Refresh |
+| อายุ Session สูงสุด | เท่าอายุ Access Token | 60 วินาทีจาก Login ไม่ขยายอายุเมื่อ Refresh |
 | Refresh Token | ไม่มี | ค่าสุ่ม 256 บิต พร้อม Session ID ใน HttpOnly Cookie |
+
+ตารางนี้อ้างอิงค่า Demo ใน `.env.example` อายุจริงเปลี่ยนได้ผ่าน Config ข้างต้น โดยนโยบายการเก็บ Token และการต่ออายุยังเหมือนเดิม
 
 - JWT มี User ID (`sub`), Session ID (`sid`), `exp`, issuer และ audience ไม่ใช้ Role จาก Frontend เป็นหลักฐานสิทธิ์
 - ทุก Protected Request ตรวจลายเซ็น JWT, อายุ Token และ Session ที่ไม่หมดอายุ/ไม่ถูกเพิกถอน Dashboard API ตรวจ Role `user` หรือ `admin` จากฐานข้อมูลทุกครั้ง แม้แก้ Role ใน Browser/JWT ก็ไม่ได้สิทธิ์เพิ่ม การเปลี่ยน Role ในฐานข้อมูลมีผลกับ Request ถัดไป
@@ -116,27 +120,27 @@ curl -i http://localhost:3000/api/auth/login \
 
 ## ทดสอบ Demo Remember Me
 
-ตั้งค่าใน `backend/.env` แล้ว Restart Backend:
+ใช้ค่า Demo เดียวกับ `.env.example` ตรวจ `backend/.env` ให้เป็นค่าต่อไปนี้ หลังเปลี่ยนค่าให้ Restart Backend จากนั้น Login ใหม่ก่อนเริ่มแต่ละกรณี เพื่อไม่ใช้ Session ที่สร้างด้วยค่าอายุเดิม:
 
 ```dotenv
-ACCESS_TOKEN_SECONDS=60
-REFRESH_SESSION_SECONDS=600
+ACCESS_TOKEN_SECONDS=30
+REFRESH_SESSION_SECONDS=60
 ```
 
 **ไม่ Remember Me**
 
 1. Login โดยไม่ติ๊ก Checkbox: บัญชี Moodeng ไป User Dashboard ส่วนบัญชี Admin ไป Admin Dashboard แสดงชื่อและ Role ตรงกับบัญชี
-2. รีโหลดภายใน 60 วินาที ต้องใช้งานต่อได้ด้วย Token เดิม โดยไม่เรียก `/auth/refresh`
-3. รอครบ 60 วินาทีจาก Login โดยไม่ต้องกดอะไร ต้องกลับหน้า Login พร้อมข้อความ Session หมดอายุ และไม่มี Refresh Request
+2. รีโหลดภายใน 30 วินาที ต้องใช้งานต่อได้ด้วย Token เดิม โดยไม่เรียก `/auth/refresh`
+3. รอครบ 30 วินาทีจาก Login โดยไม่ต้องกดอะไร ต้องกลับหน้า Login พร้อมข้อความ Session หมดอายุ และไม่มี Refresh Request
 4. Login ใหม่แล้ว Logout ก่อนหมดอายุ เก็บ Access Token ก่อน Logout ไว้ทดสอบ `/auth/me` อีกครั้ง ต้องได้ `401`
 
 **Remember Me**
 
 1. Login โดยติ๊ก Checkbox ตรวจใน DevTools ว่ามี Cookie `user_refresh` แบบ HttpOnly และไม่มี Access Token ของรอบนี้ใน sessionStorage/localStorage
-2. รีโหลด หรือปิดแล้วเปิด Browser กลับมา ก่อนครบ 10 นาที ต้องกู้ Session ผ่าน `/auth/refresh` ได้
-3. รอให้ Access Token หมดอายุ แล้วกด “โหลดข้อมูลอีกครั้ง” จะเห็น API ตอบ `401` ตามด้วย Refresh และ Retry สำเร็จ โดยไม่ต้องกรอก Password
+2. รีโหลด หรือปิดแล้วเปิด Browser กลับมา ก่อนครบ 60 วินาทีจาก Login ต้องกู้ Session ผ่าน `/auth/refresh` ได้
+3. Login ใหม่แล้วรอเกิน 30 วินาที แต่ยังไม่ถึง 60 วินาทีจาก Login จากนั้นกด “โหลดข้อมูลอีกครั้ง” จะเห็น API ตอบ `401` ตามด้วย Refresh และ Retry สำเร็จ โดยไม่ต้องกรอก Password
 4. ทุกครั้งที่ Refresh ค่า Cookie ต้องเปลี่ยน แต่ Expires ต้องไม่เลื่อนออกไป ทดลองนำ Cookie ค่าเก่ามา Refresh ด้วย API Client ต้องได้ `401`
-5. รอเกิน 10 นาทีจาก Login แล้วโหลดข้อมูลอีกครั้ง ต้องกลับ Login หากต้องการ Demo เร็วขึ้นตั้ง `REFRESH_SESSION_SECONDS=90` แล้ว Login ใหม่
+5. รอเกิน 60 วินาทีจาก Login แล้วโหลดข้อมูลอีกครั้ง ต้องกลับ Login แม้จะเคย Refresh สำเร็จระหว่างนั้น
 6. Login แล้ว Logout จากนั้นใช้ Access Token/Cookie ที่เก็บไว้ก่อน Logout เรียก API ต้องได้ `401`
 
 ทดสอบ Backend ปิดชั่วคราวระหว่างโหลด/Refresh/Logout ต้องเห็น Error และลองใหม่ได้ โดยไม่มี Refresh Loop
@@ -165,3 +169,26 @@ npm test -- --watch=false
 Backend integration tests ใช้ SQLite ในหน่วยความจำและ HTTP Server บน localhost port ชั่วคราว ไม่แก้ฐานข้อมูลจริง ครอบคลุม Config, Seed ทั้งสองบัญชี, Credentials, Token หมดอายุ/ปลอม, Refresh Rotation/Replay/Concurrent Requests, Logout, Origin, การปฏิเสธ API ข้าม Role, Role ปลอมจาก Frontend/JWT และ Role ที่เปลี่ยนในฐานข้อมูล
 
 Angular tests ครอบคลุม Validation/Loading/Error, การนำทางหลัง Login/กู้ Session ตาม Role, การป้องกันหน้าข้าม Role, Role ใน sessionStorage ที่ถูกแก้ไข, Reload, Timer หมดอายุโดยไม่เรียก API, Guard ที่รอกู้ Session, Single-flight Refresh, Late 401, Retry Limit, Network Failure, Logout และ Refresh Response ที่มาถึงหลัง Logout โดยรัน Token Lifecycle และตัวนับถอยหลังทั้งสอง Role
+
+## สถานะงานและข้อจำกัด
+
+**สิ่งที่ทำเสร็จแล้ว**
+
+- Part A: หน้า Login พร้อม Email, Password, Remember Me, Loading/Error และข้อมูลผู้ใช้หลังเข้าสู่ระบบ
+- Part B: Access/Refresh Token, Remember Me Session แบบมีอายุสูงสุด และ Session ชั่วคราวที่ไม่ Refresh อัตโนมัติเมื่อหมดอายุ
+- Part C: Dashboard และข้อความแยกตาม Role Admin/User
+- Part D: Backend ตรวจ Token, Session และ Role จากฐานข้อมูล พร้อมเก็บ Password เป็น bcrypt hash
+- Part E: Logout เพิกถอน Session, จัดการ Token หมดอายุ/Refresh ไม่สำเร็จ และจำกัดการ Retry ไม่ให้วน Refresh
+- Source Code, วิธีติดตั้ง/รัน, บัญชีทดสอบ, Token Strategy และขั้นตอนทดสอบ Remember Me ทั้งสองกรณี
+
+**สิ่งที่ยังไม่เสร็จ**
+
+- ไม่มีฟังก์ชันค้างตามขอบเขตโจทย์ที่พบจากการตรวจ Source, Automated Tests และการตรวจรับ Browser/API จริง รายละเอียดผลตรวจอยู่ใน [REVIEW_TASKS.md](REVIEW_TASKS.md)
+
+**ข้อจำกัดของระบบ**
+
+- ใช้บัญชีทดสอบที่ Seed ไว้ ไม่มีระบบสมัครสมาชิกตามขอบเขตโจทย์
+- Dashboard แสดงข้อมูลตัวอย่างและข้อความตาม Role ไม่มีฟังก์ชันจัดการระบบหรือข้อมูลส่วนตัวแบบเต็มรูปแบบ
+- ใช้ SQLite เป็นไฟล์ในเครื่อง Backend และกำหนด API base ของ Frontend สำหรับรันบน localhost
+- การรวม Refresh พร้อมกันทำภายในแอป instance เดียว ยังไม่มีการประสานงานข้ามแท็บ หาก Refresh พร้อมกันหลายแท็บอาจต้อง Login ใหม่
+- บัญชีและ JWT Secret ที่เตรียมไว้เป็นค่าทดสอบสำหรับ Demo ในเครื่อง
