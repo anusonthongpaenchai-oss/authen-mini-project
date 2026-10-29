@@ -8,3 +8,4 @@ src/db/*.sqlite-*
 
 .env
 .env.*
+!.env.example

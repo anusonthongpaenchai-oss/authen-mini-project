@@ -1,10 +1,12 @@
 import "dotenv/config";
 import { createApp } from "./app.js";
 import { openDatabase } from "./db/connection.js";
+import { loadConfig } from "./config.js";
 
-const PORT = process.env.PORT || 3000;
+const config = loadConfig();
+const PORT = config.port;
 const database = openDatabase();
-const app = createApp(database);
+const app = createApp(database, config);
 
 const server = app.listen(PORT, () => {
   console.log("SQLite database connected");

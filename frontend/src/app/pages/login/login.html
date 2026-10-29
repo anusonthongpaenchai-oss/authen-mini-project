@@ -1,0 +1,81 @@
+<main class="flex items-center justify-center p-6 min-h-screen bg-slate-100 text-slate-900 md:p-10">
+  <section
+    class="p-6 w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-sm md:p-8"
+    aria-labelledby="login-title"
+  >
+    <p class="mb-2 text-sm font-semibold text-indigo-700">AUTHENTICATION · USER</p>
+    <h1 id="login-title" class="mb-2 text-3xl font-bold">เข้าสู่ระบบ</h1>
+    <p class="mb-6 text-sm text-slate-600">ยินดีต้อนรับ กลับมาใช้งานบัญชีของคุณ</p>
+    @if (auth.notice()) {
+      <p class="mb-4 p-3 text-sm text-indigo-800 bg-indigo-50 rounded-lg" role="status">
+        {{ auth.notice() }}
+      </p>
+    }
+    @if (auth.recoveryAvailable()) {
+      <button
+        type="button"
+        class="mb-4 p-2 w-full text-sm text-indigo-700 border border-indigo-300 rounded-lg disabled:opacity-50"
+        [disabled]="loading()"
+        (click)="recover()"
+      >
+        ลองกู้ Session อีกครั้ง
+      </button>
+    }
+    <form
+      class="flex flex-col gap-4"
+      [formGroup]="form"
+      (ngSubmit)="submit()"
+      [attr.aria-busy]="loading()"
+    >
+      <div>
+        <label for="email" class="block mb-1 text-sm font-medium">Email</label>
+        <input
+          id="email"
+          type="email"
+          autocomplete="username"
+          formControlName="email"
+          class="block px-3 py-2 w-full bg-white border border-slate-300 rounded-lg focus:outline-2 focus:outline-indigo-600"
+          [attr.aria-invalid]="form.controls.email.touched && form.controls.email.invalid"
+          aria-describedby="email-error"
+        />
+        @if (form.controls.email.touched && form.controls.email.invalid) {
+          <p id="email-error" class="mt-1 text-sm text-red-700">กรุณากรอก Email ให้ถูกต้อง</p>
+        }
+      </div>
+      <div>
+        <label for="password" class="block mb-1 text-sm font-medium">Password</label>
+        <input
+          id="password"
+          type="password"
+          autocomplete="current-password"
+          formControlName="password"
+          class="block px-3 py-2 w-full bg-white border border-slate-300 rounded-lg focus:outline-2 focus:outline-indigo-600"
+          [attr.aria-invalid]="form.controls.password.touched && form.controls.password.invalid"
+          aria-describedby="password-error"
+        />
+        @if (form.controls.password.touched && form.controls.password.invalid) {
+          <p id="password-error" class="mt-1 text-sm text-red-700">
+            กรุณากรอก Password ไม่เกิน 72 ตัวอักษร
+          </p>
+        }
+      </div>
+      <label class="flex items-center gap-2 text-sm">
+        <input type="checkbox" formControlName="rememberMe" class="size-4 accent-indigo-600" />
+        Remember Me
+      </label>
+      <p class="text-xs text-slate-500">
+        เมื่อไม่เลือก Remember Me ระบบจะไม่ต่ออายุ Session อัตโนมัติ
+      </p>
+      @if (error()) {
+        <p class="p-3 text-sm text-red-800 bg-red-50 rounded-lg" role="alert">{{ error() }}</p>
+      }
+      <button
+        type="submit"
+        class="px-4 py-3 w-full font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+        [disabled]="loading() || auth.refreshing()"
+      >
+        {{ loading() ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบ' }}
+      </button>
+    </form>
+  </section>
+</main>
