@@ -1,0 +1,10 @@
+node_modules/
+dist/
+/src/server.js
+
+# Generated SQLite databases and their journal files.
+src/db/*.sqlite
+src/db/*.sqlite-*
+
+.env
+.env.*

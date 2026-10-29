@@ -1,0 +1,78 @@
+<main class="grid min-h-screen place-items-center bg-[#f3f6fa] p-6 font-sans text-[#17233b]">
+  <section
+    class="w-full max-w-[560px] rounded-[18px] border border-[#e1e7ef] bg-white p-6 shadow-[0_12px_36px_#253b5710] min-[481px]:p-9"
+    aria-labelledby="page-title"
+  >
+    <p class="mb-2 text-xs font-bold tracking-[0.12em] text-[#526987]">SYSTEM STATUS</p>
+    <h1 id="page-title" class="text-[30px] font-bold">Health Check</h1>
+    <p class="mt-2 mb-7 text-[#66758b]">ตรวจสอบการเชื่อมต่อระหว่าง frontend และ backend</p>
+    <div
+      class="flex items-start gap-3 rounded-[10px] p-[18px]"
+      [class]="
+        state() === 'success'
+          ? 'bg-[#eaf8f1] text-[#126b46]'
+          : state() === 'error'
+            ? 'bg-[#fff0f0] text-[#a52c32]'
+            : 'bg-[#f1f5fa] text-[#435775]'
+      "
+      role="status"
+      aria-live="polite"
+    >
+      <span class="mt-[7px] size-[10px] shrink-0 rounded-full bg-current" aria-hidden="true"></span>
+      @if (state() === 'loading') {
+        <div>
+          <strong>กำลังตรวจสอบการเชื่อมต่อ</strong>
+          <p class="mt-1 text-sm">กรุณารอสักครู่</p>
+        </div>
+      } @else if (state() === 'success') {
+        <div>
+          <strong>เชื่อมต่อ backend สำเร็จ</strong>
+          <p class="mt-1 text-sm">{{ result()?.message }}</p>
+        </div>
+      } @else {
+        <div>
+          <strong>ไม่สามารถเชื่อมต่อ backend ได้</strong>
+        </div>
+      }
+    </div>
+    <ul class="my-[22px] list-none p-0">
+      <li
+        class="flex flex-col gap-1 border-b border-[#edf0f4] py-[10px] text-sm min-[481px]:flex-row min-[481px]:justify-between min-[481px]:gap-4"
+      >
+        <span class="text-[#718096]">Endpoint</span
+        ><span class="wrap-anywhere min-[481px]:text-right">{{ endpoint }}</span>
+      </li>
+      @if (result(); as health) {
+        <li
+          class="flex flex-col gap-1 border-b border-[#edf0f4] py-[10px] text-sm min-[481px]:flex-row min-[481px]:justify-between min-[481px]:gap-4"
+        >
+          <span class="text-[#718096]">Environment</span
+          ><span class="wrap-anywhere min-[481px]:text-right">{{ health.environment }}</span>
+        </li>
+        <li
+          class="flex flex-col gap-1 border-b border-[#edf0f4] py-[10px] text-sm min-[481px]:flex-row min-[481px]:justify-between min-[481px]:gap-4"
+        >
+          <span class="text-[#718096]">Uptime</span
+          >
+          <span class="wrap-anywhere min-[481px]:text-right">{{ health.uptime }} วินาที</span>
+        </li>
+        <li
+          class="flex flex-col gap-1 border-b border-[#edf0f4] py-[10px] text-sm min-[481px]:flex-row min-[481px]:justify-between min-[481px]:gap-4"
+        >
+          <span class="text-[#718096]">เวลาจากเซิร์ฟเวอร์</span
+          ><span class="wrap-anywhere min-[481px]:text-right">{{
+            health.timestamp | date: 'medium'
+          }}</span>
+        </li>
+      }
+    </ul>
+    <button
+      class="cursor-pointer rounded-lg bg-[#2456c5] px-[18px] py-[11px] font-semibold text-white hover:bg-[#1d46a2] disabled:cursor-wait disabled:opacity-55"
+      type="button"
+      (click)="checkHealth()"
+      [disabled]="state() === 'loading'"
+    >
+      ตรวจสอบอีกครั้ง
+    </button>
+  </section>
+</main>
