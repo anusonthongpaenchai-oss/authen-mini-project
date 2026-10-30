@@ -183,7 +183,7 @@ Angular tests ครอบคลุม Validation/Loading/Error, การนำ
 
 **สิ่งที่ยังไม่เสร็จ**
 
-- ไม่มีฟังก์ชันค้างตามขอบเขตโจทย์ที่พบจากการตรวจ Source, Automated Tests และการตรวจรับ Browser/API จริง รายละเอียดผลตรวจอยู่ใน [REVIEW_TASKS.md](REVIEW_TASKS.md)
+- ไม่มีฟังก์ชันค้างตามขอบเขตโจทย์ที่พบจากการตรวจ Source, Automated Tests และการตรวจรับ Browser/API จริง
 
 **ข้อจำกัดของระบบ**
 
